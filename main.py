@@ -5,6 +5,7 @@ from util import *
 from scipy.ndimage import correlate
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
+from skimage import color, data, restoration
 
 
 def deblur_single_level(blurred, k_size):
@@ -18,11 +19,11 @@ def deblur_single_level(blurred, k_size):
     psf[(k_size[0]+1)//2][(k_size[1]+1)//2] = 1
 
     # prepare gradient maps of blurred
-    gaus2 = gauss2d(shape=(60, 60), sigma=10)
-    blur_f = np.fft.fft2(blurred)
-    gaus2_f = psf2otf(gaus2, blurred.shape)
-    img_flt_f = blur_f * gaus2_f
-    blurred = np.real(np.fft.ifft2(img_flt_f))
+    # gaus2 = gauss2d(shape=(60, 60), sigma=10)
+    # blur_f = np.fft.fft2(blurred)
+    # gaus2_f = psf2otf(gaus2, blurred.shape)
+    # img_flt_f = blur_f * gaus2_f
+    # blurred = np.real(np.fft.ifft2(img_flt_f))
 
     sx = np.array([[0, -1, 1]])
     sy = np.array([[0, -1, 1]]).T
@@ -116,7 +117,7 @@ def conjgrad(x, b, n_iters, tol, Ax_func, func_param):
         if sqrt(rsnew) < tol:
             break
         p = r + rsnew / rsold * p
-        rsol = rsnew
+        rsold = rsnew
 
     return x
 
@@ -136,6 +137,8 @@ def estimate_psf(blurred, latent, psf_size, lambda_k):
     psf = otf2psf(K, psf_size)
     psf = psf / np.sum(psf)
     psf = np.real(psf)
+    psf = np.greater(psf, np.max(psf) * 0.05) * psf
+    psf = psf / np.sum(psf)
 
     return psf
 
@@ -170,6 +173,28 @@ def estimate_psf(blurred, latent, psf_size, lambda_k):
 #     return LUT
 
 
+def showResult(img, psf, deblur):
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(8, 5))
+    plt.gray()
+
+    for a in (ax[0], ax[1], ax[2]):
+        a.axis('off')
+
+    ax[0].imshow(img)
+    ax[0].set_title('Original Data')
+
+    ax[1].imshow(psf)
+    ax[1].set_title('Kernel')
+
+    ax[2].imshow(deblur)
+    ax[2].set_title('Restoration using\nRichardson-Lucy')
+
+    fig.subplots_adjust(wspace=0.02, hspace=0.2,
+                        top=0.9, bottom=0.05, left=0, right=1)
+    plt.show()
+    return 0
+
+
 def main():
     x = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
     y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
@@ -177,21 +202,30 @@ def main():
     blurred = cv2.imread('picassoBlurImage.PNG', IMREAD_GRAYSCALE) / 255.
     _out = cv2.imread('picassoOut.png', IMREAD_GRAYSCALE) / 255.
 
-    # psf = np.load('51sizekernel2.npy', allow_pickle=True)
+    psf = np.load('picasso51kernel4.npy', allow_pickle=True)
+    # latent = deconv_sps(np.transpose(
+    # np.array([blurred, blurred]), (1, 2, 0)), psf, 0.00064, 0.1)
 
-    psf, latent = deblur_single_level(blurred, (51, 51))
+    # psf, latent = deblur_single_level(blurred, (51, 51))
 
     # plt.imshow(psf, cmap='gray')
     # plt.show()
-    print(latent.shape)
 
-    # np.save('51sizelabel2', latent)
-    print(np.max(psf))
+    deconv = restoration.wiener(blurred, psf, 0.1)
 
-    cv2.imshow("51*51 latent0", latent[:, :, 0])
-    cv2.imshow("51*51 latent1", latent[:, :, 1])
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    plt.imshow(deconv, cmap='gray')
+    plt.show()
+    # np.save('picasso51kernel4', psf)
+
+    # cv2.imwrite('picassolatent04.png', latent[:, :, 0])
+    # cv2.imwrite('picassolatent14.png', latent[:, :, 1])
+    # cv2.imwrite('picassokernel4.png', psf)
+    # print(np.max(psf))
+
+    # cv2.imshow("51*51 latent0", latent[:, :, 0])
+    # cv2.imshow("51*51 latent1", latent[:, :, 1])
+    # cv2.waitKey()
+    # cv2.destroyAllWindows()
 
     return 0
 
