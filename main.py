@@ -30,7 +30,8 @@ def deblur_single_level(blurred, k_size):
 
     bx = correlate(blurred, sx)
     by = correlate(blurred, sy)
-
+    bx = cv2.filter2D(blurred, -1, sx)
+    bx = cv2.filter2D(blurred, -1, sy)
     blurred_g = np.array((bx, by))
     blurred_g = np.transpose(blurred_g, (1, 2, 0))
 
@@ -39,7 +40,7 @@ def deblur_single_level(blurred, k_size):
         energy, data, prior_l, prior_k = energy_func(
             latent_g, blurred_g, psf, lambda_l, alpha, labmda_k)
         print(i)
-        print(f'{i} {energy}    {data}  {prior_l}   {prior_k}')
+        print(f'{energy}    {data}  {prior_l}   {prior_k}')
         psf = estimate_psf(blurred_g, latent_g, psf.shape, labmda_k)
 
     return psf, latent_g
@@ -52,7 +53,7 @@ def energy_func(latent, blurred, psf, lambda_l, alpha, lambda_k):
     K = np.transpose(np.array([K, K]), (1, 2, 0))
     b = np.real(np.fft.ifft2(np.fft.fft2(latent)*K))
     diff = b - blurred
-    data = np.linalg.norm(diff) ** 2
+    data = np.sum(diff ** 2)
 
     w = np.maximum(np.abs(latent), tau) ** (alpha-2)
     prior_l = np.sum(w * (latent**2))
@@ -135,7 +136,6 @@ def estimate_psf(blurred, latent, psf_size, lambda_k):
     K = (np.conjugate(Lx) * Bx + np.conjugate(Ly) * By) / \
         (np.conjugate(Lx) * Lx + np.conjugate(Ly) * Ly + Lap * lambda_k)
     psf = otf2psf(K, psf_size)
-    psf = psf / np.sum(psf)
     psf = np.real(psf)
     psf = np.greater(psf, np.max(psf) * 0.05) * psf
     psf = psf / np.sum(psf)
@@ -143,34 +143,34 @@ def estimate_psf(blurred, latent, psf_size, lambda_k):
     return psf
 
 
-# def find_optimal_no_blur(blurred, lambda_l, alpha):
-#     LUT = make_LUT(lambda_l, alpha)
-#     bx = blurred[:, :, 0]
-#     by = blurred[:, :, 1]
+def find_optimal_no_blur(blurred, lambda_l, alpha):
+    LUT = make_LUT(lambda_l, alpha)
+    bx = blurred[:, :, 0]
+    by = blurred[:, :, 1]
 
-#     lx = interp1d(LUT[0], LUT[1], kind='linear', fill_value='extrapolate')(bx)
-#     lx = lx.reshape(bx.shape)
+    lx = interp1d(LUT[0], LUT[1], kind='linear', fill_value='extrapolate')(bx)
+    lx = lx.reshape(bx.shape)
 
-#     ly = interp1d(LUT[0], LUT[1], kind='linear', fill_value='extrapolate')(by)
-#     ly = ly.reshape(by.shape)
-#     l = np.array(lx, ly)
-#     l = np.transpose(l, (1, 2, 0))
-#     return l
+    ly = interp1d(LUT[0], LUT[1], kind='linear', fill_value='extrapolate')(by)
+    ly = ly.reshape(by.shape)
+    l = np.array(lx, ly)
+    l = np.transpose(l, (1, 2, 0))
+    return l
 
 
-# def make_LUT(lambda_l, alpha):
-#     v = np.arange(-1, 1, 0.1/256)
-#     b, l = np.meshgrid(v, v)
-#     tau = 0.01
+def make_LUT(lambda_l, alpha):
+    v = np.arange(-1, 1, 0.1/256)
+    b, l = np.meshgrid(v, v)
+    tau = 0.01
 
-#     w = np.maximum(np.abs(l), tau) ** (alpha-2)
-#     prior_l = w*l**2
+    w = np.maximum(np.abs(l), tau) ** (alpha-2)
+    prior_l = w*l**2
 
-#     energies = (b - l) ** 2 + lambda_l * prior_l
-#     min_energies, min_indices = np.min(energies, 0), np.argmin(energies, 0)
-#     LUT = [v, l[min_indices]]
+    energies = (b - l) ** 2 + lambda_l * prior_l
+    min_energies, min_indices = np.min(energies, 0), np.argmin(energies, 0)
+    LUT = [v, l[min_indices]]
 
-#     return LUT
+    return LUT
 
 
 def showResult(img, psf, deblur):
@@ -199,22 +199,22 @@ def main():
     x = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
     y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
 
-    blurred = cv2.imread('picassoBlurImage.PNG', IMREAD_GRAYSCALE) / 255.
-    _out = cv2.imread('picassoOut.png', IMREAD_GRAYSCALE) / 255.
+    blurred = cv2.imread('blurred.png', IMREAD_GRAYSCALE) / 255.
+    # _out = cv2.imread('picassoOut.png', IMREAD_GRAYSCALE) / 255.
 
-    psf = np.load('picasso51kernel4.npy', allow_pickle=True)
+    # psf = np.load('picasso51kernel4.npy', allow_pickle=True)
     # latent = deconv_sps(np.transpose(
     # np.array([blurred, blurred]), (1, 2, 0)), psf, 0.00064, 0.1)
 
-    # psf, latent = deblur_single_level(blurred, (51, 51))
+    psf, latent = deblur_single_level(blurred, (31, 31))
 
-    # plt.imshow(psf, cmap='gray')
-    # plt.show()
-
-    deconv = restoration.wiener(blurred, psf, 0.1)
-
-    plt.imshow(deconv, cmap='gray')
+    plt.imshow(psf, cmap='gray')
     plt.show()
+
+    # deconv = restoration.wiener(blurred, psf, 0.1)
+
+    # plt.imshow(deconv, cmap='gray')
+    # plt.show()
     # np.save('picasso51kernel4', psf)
 
     # cv2.imwrite('picassolatent04.png', latent[:, :, 0])
@@ -222,10 +222,10 @@ def main():
     # cv2.imwrite('picassokernel4.png', psf)
     # print(np.max(psf))
 
-    # cv2.imshow("51*51 latent0", latent[:, :, 0])
-    # cv2.imshow("51*51 latent1", latent[:, :, 1])
-    # cv2.waitKey()
-    # cv2.destroyAllWindows()
+    cv2.imshow("51*51 latent0", latent[:, :, 0])
+    cv2.imshow("51*51 latent1", latent[:, :, 1])
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 
     return 0
 
